@@ -1,0 +1,18 @@
+{
+  "sites": [
+    {
+      "site_name": "BPM Power",
+      "url_template": "https://www.bpm-power.com/it/online/componenti/schede-video/?pag={page}",
+      "product_selector": "div.product-wrapper",
+      "name_selector": "div.product-title",
+      "price_selector": "span.price",
+    },
+    {
+      "site_name": "PCComponenti",
+      "url_template": "https://www.pccomponenti.it/schede-grafiche/?pag={page}",
+      "product_selector": "div.tarjeta-articulo__contenido",
+      "name_selector": "a.tarjeta-articolo__nome",
+      "price_selector": "span.tarjeta-prezzo__prezzo-ora",
+    }
+  ]
+}

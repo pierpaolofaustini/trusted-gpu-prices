@@ -1,4 +1,6 @@
 import time
+import re
+import urllib.parse
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
@@ -17,41 +19,49 @@ from selenium.common.exceptions import (
       - price
       - availability
 
+    Uses the site’s search URL if brand/model provided, else full catalog.
     Handles StaleElementReferenceException by re-fetching each card
     element by index and retrying up to 3 times. Prints a live counter.
-    """
+"""
 
-# None since one or more argument can be left empty by the user
+# None defaults allow brand/model to be omitted by the user
 def get_products(brand=None, model=None):
-    
+
     # Normalize filters
     brand = brand.lower().strip() if brand else None
     model = model.lower().strip() if model else None
 
+    # Build initial URL: search if filters present, else full catalog
+    if brand or model:
+        terms = "+".join(filter(None, [brand, model]))
+        base_url = f"https://www.bpm-power.com/it/ricerca?k={urllib.parse.quote_plus(terms)}"
+    else:
+        base_url = "https://www.bpm-power.com/it/online/componenti-pc/schede-video"
+    page = 1
+
+    # Headless Chrome setup for scraping
     opts = Options()
-    opts.add_argument("--headless") # Headless Chrome setup for scraping
-    opts.add_argument("--disable-gpu") # Disable GPU to increase speed
+    opts.add_argument("--headless")      # Headless Chrome to speed up scraping
+    opts.add_argument("--disable-gpu")   # Disable GPU for stability
     driver = webdriver.Chrome(service=Service(), options=opts)
 
     products = []
-    base_url = "https://www.bpm-power.com/it/online/componenti-pc/schede-video"
-    page = 1
-
     try:
         while True:
-            driver.get(f"{base_url}?page={page}")
+            url = f"{base_url}&page={page}" if "?" in base_url else f"{base_url}?page={page}"
+            driver.get(url)
 
-            # Wait 10s max for product grid to load (due to injection)
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "#divTopGridListProduct"))
+            # Wait up to 15s for at least one product card to load
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#divGridProducts .bordoCat"))
             )
 
-            # End pagination when no page items found
-            if not driver.find_elements(By.CSS_SELECTOR, "ul.pagination li.page-item"):
+            # Stop if no pagination (after page 1) on full-catalog
+            if page > 1 and not driver.find_elements(By.CSS_SELECTOR, "ul.pagination li.page-item"):
                 break
 
-            cards_selector = "#divGridProducts .bordoCat"
-            total = len(driver.find_elements(By.CSS_SELECTOR, cards_selector))
+            cards_sel = "#divGridProducts .bordoCat"
+            total = len(driver.find_elements(By.CSS_SELECTOR, cards_sel))
 
             # Iterate by index to avoid stale references
             for idx in range(total):
@@ -60,7 +70,11 @@ def get_products(brand=None, model=None):
                 retries = 3
                 while retries:
                     try:
-                        card = driver.find_elements(By.CSS_SELECTOR, cards_selector)[idx]
+                        card = driver.find_elements(By.CSS_SELECTOR, cards_sel)[idx]
+
+                        # Skip sold-out items
+                        if card.find_elements(By.CSS_SELECTOR, "span.dispoNo"):
+                            break
 
                         # Extract name
                         try:
@@ -71,10 +85,15 @@ def get_products(brand=None, model=None):
                             name = "—"
                         nl = name.lower()
 
-                        # Apply filters
+                        # Only real video cards (must contain "scheda video")
+                        if "scheda video" not in nl:
+                            break
+
+                        # Brand filter
                         if brand and brand not in nl:
                             break
-                        if model and model not in nl:
+                        # Model filter as whole word
+                        if model and not re.search(rf"\b{re.escape(model)}\b", nl):
                             break
 
                         # Extract price
@@ -102,11 +121,11 @@ def get_products(brand=None, model=None):
 
                     except StaleElementReferenceException:
                         retries -= 1
-
+                        
                         # Give 0.2s before the retry, for browser/DOM to stabilize
                         time.sleep(0.2)
                     except Exception:
-                        break  # skip on any other error
+                        break  # skip any other error
 
             # Move on to the next page
             page += 1
@@ -116,4 +135,5 @@ def get_products(brand=None, model=None):
 
     finally:
         driver.quit()
+
 

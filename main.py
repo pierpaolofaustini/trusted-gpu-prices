@@ -1,23 +1,4 @@
-import re
-from search.bpm_power import get_products as get_bpm_products
-from search.esseshop import get_products as get_esse_products
-
-def parse_price(price_str: str) -> float:
-    """
-    Transform:
-     - '1.234,56 €'  in 1234.56
-     - '330.66 €'    in 330.66
-     - '284,59 €'    in 284.59
-    """
-    s = price_str.replace("€", "").strip()
-    if "," in s:
-        # If comma present, strip thousand separators and convert comma to decimal point
-        s = s.replace(".", "").replace(",", ".")
-    else:
-        s = s.replace(" ", "")
-    # Extracting numeric part + decimal, otherwise following float could return ValueError
-    m = re.search(r"\d+(\.\d+)?", s)
-    return float(m.group(0)) if m else float("inf")
+from search import get_bpm_products, get_esse_products
 
 def main():
     print("\n🖥️  Benvenuto nel comparatore di schede video.")
@@ -36,22 +17,21 @@ def main():
     print("\n🔍 Inizio ricerca su EsseShop...")
     esse_raw = get_esse_products(brand=brand, model=model)
 
-    # Combine and sort all products by numeric price
+    # Combine results and sort products by numeric price
     all_products = []
     for p in bpm_raw:
-        p["source"]    = "BPM-Power"
-        p["price_val"] = parse_price(p["price"])
+        p["source"] = "BPM-Power"
         all_products.append(p)
     for p in esse_raw:
-        p["source"]    = "EsseShop"
-        p["price_val"] = parse_price(p["price"])
+        p["source"] = "EsseShop"
         all_products.append(p)
 
     if not all_products:
         print("\n❌ Nessun prodotto trovato sui due siti con i criteri selezionati.")
         return
 
-    all_products.sort(key=lambda x: x["price_val"])
+    # Getting only top 5 cheapest results 
+    all_products.sort(key=lambda x: x["price_value"])
     top5 = all_products[:5]
     cheapest = top5[0]
 
@@ -68,4 +48,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
